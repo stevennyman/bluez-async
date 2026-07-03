@@ -224,6 +224,44 @@ impl FromStr for AddressType {
     }
 }
 
+/// Manually added (not part of upstream bluez-async): which bearer (transport) BlueZ should
+/// prefer when connecting to a dual-mode (BR/EDR + LE) device, via BlueZ's own `[experimental]`
+/// `PreferredBearer` property on `org.bluez.Device1`.
+/// See https://github.com/bluez/bluez/blob/master/doc/org.bluez.Device.rst
+///
+/// Setting this only takes effect while the device is disconnected, and requires BlueZ to have
+/// experimental features enabled (`bluetoothd --experimental` or equivalent) -- on a system
+/// without that, setting it is expected to fail; callers should treat failure as non-fatal.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub enum PreferredBearer {
+    /// Connect via whichever bearer was last used (or last seen, if never connected). BlueZ's
+    /// own default.
+    LastUsed,
+    /// Always connect via BR/EDR (Bluetooth Classic).
+    BrEdr,
+    /// Always connect via LE (Bluetooth Low Energy).
+    Le,
+    /// Connect via whichever bearer the device was last seen/discovered on.
+    LastSeen,
+}
+
+impl PreferredBearer {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::LastUsed => "last-used",
+            Self::BrEdr => "bredr",
+            Self::Le => "le",
+            Self::LastSeen => "last-seen",
+        }
+    }
+}
+
+impl Display for PreferredBearer {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 fn get_manufacturer_data(
     device_properties: OrgBluezDevice1Properties,
 ) -> Option<HashMap<u16, Vec<u8>>> {

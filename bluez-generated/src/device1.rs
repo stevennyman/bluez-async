@@ -22,6 +22,9 @@ pub trait OrgBluezDevice1 {
     fn bonded(&self) -> nonblock::MethodReply<bool>;
     fn trusted(&self) -> nonblock::MethodReply<bool>;
     fn set_trusted(&self, value: bool) -> nonblock::MethodReply<()>;
+    // Manually added -- see the comment on PreferredBearer in specs/org.bluez.Device1.xml.
+    fn preferred_bearer(&self) -> nonblock::MethodReply<String>;
+    fn set_preferred_bearer(&self, value: String) -> nonblock::MethodReply<()>;
     fn blocked(&self) -> nonblock::MethodReply<bool>;
     fn set_blocked(&self, value: bool) -> nonblock::MethodReply<()>;
     fn legacy_pairing(&self) -> nonblock::MethodReply<bool>;
@@ -253,6 +256,15 @@ impl<'a, T: nonblock::NonblockReply, C: ::std::ops::Deref<Target = T>> OrgBluezD
         )
     }
 
+    // Manually added -- see the comment on PreferredBearer in specs/org.bluez.Device1.xml.
+    fn preferred_bearer(&self) -> nonblock::MethodReply<String> {
+        <Self as nonblock::stdintf::org_freedesktop_dbus::Properties>::get(
+            &self,
+            "org.bluez.Device1",
+            "PreferredBearer",
+        )
+    }
+
     fn blocked(&self) -> nonblock::MethodReply<bool> {
         <Self as nonblock::stdintf::org_freedesktop_dbus::Properties>::get(
             &self,
@@ -367,6 +379,16 @@ impl<'a, T: nonblock::NonblockReply, C: ::std::ops::Deref<Target = T>> OrgBluezD
             &self,
             "org.bluez.Device1",
             "Trusted",
+            value,
+        )
+    }
+
+    // Manually added -- see the comment on PreferredBearer in specs/org.bluez.Device1.xml.
+    fn set_preferred_bearer(&self, value: String) -> nonblock::MethodReply<()> {
+        <Self as nonblock::stdintf::org_freedesktop_dbus::Properties>::set(
+            &self,
+            "org.bluez.Device1",
+            "PreferredBearer",
             value,
         )
     }

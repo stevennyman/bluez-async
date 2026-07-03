@@ -24,7 +24,7 @@ pub use self::adapter::{AdapterId, AdapterInfo};
 pub use self::bleuuid::{BleUuid, uuid_from_u16, uuid_from_u32};
 pub use self::characteristic::{CharacteristicFlags, CharacteristicId, CharacteristicInfo};
 pub use self::descriptor::{DescriptorId, DescriptorInfo};
-pub use self::device::{AddressType, DeviceId, DeviceInfo};
+pub use self::device::{AddressType, DeviceId, DeviceInfo, PreferredBearer};
 pub use self::events::{AdapterEvent, BluetoothEvent, CharacteristicEvent, DeviceEvent};
 use self::introspect::IntrospectParse;
 pub use self::macaddress::{MacAddress, ParseMacAddressError};
@@ -741,6 +741,23 @@ impl BluetoothSession {
         Ok(self
             .device(id, DBUS_METHOD_CALL_TIMEOUT)
             .cancel_pairing()
+            .await?)
+    }
+
+    /// Manually added (not part of upstream bluez-async): set which bearer (transport) BlueZ
+    /// should prefer when connecting to this device, for dual-mode (BR/EDR + LE) devices. See
+    /// [`PreferredBearer`] for details, including the important caveats: this is a BlueZ
+    /// `[experimental]` feature, only takes effect while the device is disconnected, and may
+    /// fail on systems where experimental features aren't enabled -- callers should generally
+    /// treat a failure here as non-fatal rather than aborting a subsequent `connect()`.
+    pub async fn set_preferred_bearer(
+        &self,
+        id: &DeviceId,
+        bearer: PreferredBearer,
+    ) -> Result<(), BluetoothError> {
+        Ok(self
+            .device(id, DBUS_METHOD_CALL_TIMEOUT)
+            .set_preferred_bearer(bearer.to_string())
             .await?)
     }
 
