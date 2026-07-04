@@ -27,11 +27,6 @@
     <property name="Paired" type="b" access="read"/>
     <property name="Bonded" type="b" access="read"/>
     <property name="Trusted" type="b" access="readwrite"/>
-    <!-- Manually added (not present when this spec was last generated): BlueZ's own
-         [experimental] property for pinning which bearer (transport) Connect() uses for a
-         dual-mode device -- "last-used" (default), "bredr", "le", "last-seen".
-         See https://github.com/bluez/bluez/blob/master/doc/org.bluez.Device.rst -->
-    <property name="PreferredBearer" type="s" access="readwrite"/>
     <property name="Blocked" type="b" access="readwrite"/>
     <property name="LegacyPairing" type="b" access="read"/>
     <property name="RSSI" type="n" access="read"/>

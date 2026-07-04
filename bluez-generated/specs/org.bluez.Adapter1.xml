@@ -18,6 +18,17 @@
     <method name="GetDiscoveryFilters">
       <arg name="filters" type="as" direction="out"/>
     </method>
+    <!-- Manually added (not present when this spec was last generated): BlueZ's own
+         [experimental] method to connect directly to a device by address, specifying which
+         bearer (via AddressType: "public"/"random" forces LE; omitted defaults to BR/EDR) to
+         connect with -- doesn't require the device to have been discovered/classified as
+         dual-mode first, unlike Device1's PreferredBearer property.
+         See https://github.com/bluez/bluez/blob/master/src/adapter.c (connect_device) and
+         https://github.com/bluez/bluez/blob/master/doc/org.bluez.Adapter.rst -->
+    <method name="ConnectDevice">
+      <arg name="properties" type="a{sv}" direction="in"/>
+      <arg name="device" type="o" direction="out"/>
+    </method>
     <property name="Address" type="s" access="read"/>
     <property name="AddressType" type="s" access="read"/>
     <property name="Name" type="s" access="read"/>

@@ -9,6 +9,11 @@ pub trait OrgBluezAdapter1 {
     fn stop_discovery(&self) -> nonblock::MethodReply<()>;
     fn remove_device(&self, device: dbus::Path) -> nonblock::MethodReply<()>;
     fn get_discovery_filters(&self) -> nonblock::MethodReply<Vec<String>>;
+    // Manually added -- see the comment on ConnectDevice in specs/org.bluez.Adapter1.xml.
+    fn connect_device(
+        &self,
+        properties: arg::PropMap,
+    ) -> nonblock::MethodReply<dbus::Path<'static>>;
     fn address(&self) -> nonblock::MethodReply<String>;
     fn address_type(&self) -> nonblock::MethodReply<String>;
     fn name(&self) -> nonblock::MethodReply<String>;
@@ -132,6 +137,15 @@ impl<'a, T: nonblock::NonblockReply, C: ::std::ops::Deref<Target = T>> OrgBluezA
     fn get_discovery_filters(&self) -> nonblock::MethodReply<Vec<String>> {
         self.method_call("org.bluez.Adapter1", "GetDiscoveryFilters", ())
             .and_then(|r: (Vec<String>,)| Ok(r.0))
+    }
+
+    // Manually added -- see the comment on ConnectDevice in specs/org.bluez.Adapter1.xml.
+    fn connect_device(
+        &self,
+        properties: arg::PropMap,
+    ) -> nonblock::MethodReply<dbus::Path<'static>> {
+        self.method_call("org.bluez.Adapter1", "ConnectDevice", (properties,))
+            .and_then(|r: (dbus::Path<'static>,)| Ok(r.0))
     }
 
     fn address(&self) -> nonblock::MethodReply<String> {

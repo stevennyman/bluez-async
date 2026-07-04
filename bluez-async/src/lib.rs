@@ -24,7 +24,7 @@ pub use self::adapter::{AdapterId, AdapterInfo};
 pub use self::bleuuid::{BleUuid, uuid_from_u16, uuid_from_u32};
 pub use self::characteristic::{CharacteristicFlags, CharacteristicId, CharacteristicInfo};
 pub use self::descriptor::{DescriptorId, DescriptorInfo};
-pub use self::device::{AddressType, DeviceId, DeviceInfo, PreferredBearer};
+pub use self::device::{AddressType, DeviceId, DeviceInfo};
 pub use self::events::{AdapterEvent, BluetoothEvent, CharacteristicEvent, DeviceEvent};
 use self::introspect::IntrospectParse;
 pub use self::macaddress::{MacAddress, ParseMacAddressError};
@@ -744,23 +744,6 @@ impl BluetoothSession {
             .await?)
     }
 
-    /// Manually added (not part of upstream bluez-async): set which bearer (transport) BlueZ
-    /// should prefer when connecting to this device, for dual-mode (BR/EDR + LE) devices. See
-    /// [`PreferredBearer`] for details, including the important caveats: this is a BlueZ
-    /// `[experimental]` feature, only takes effect while the device is disconnected, and may
-    /// fail on systems where experimental features aren't enabled -- callers should generally
-    /// treat a failure here as non-fatal rather than aborting a subsequent `connect()`.
-    pub async fn set_preferred_bearer(
-        &self,
-        id: &DeviceId,
-        bearer: PreferredBearer,
-    ) -> Result<(), BluetoothError> {
-        Ok(self
-            .device(id, DBUS_METHOD_CALL_TIMEOUT)
-            .set_preferred_bearer(bearer.to_string())
-            .await?)
-    }
-
     /// Connect to the given Bluetooth device.
     pub async fn connect(&self, id: &DeviceId) -> Result<(), BluetoothError> {
         self.connect_with_timeout(id, DBUS_METHOD_CALL_TIMEOUT)
@@ -775,6 +758,63 @@ impl BluetoothSession {
     ) -> Result<(), BluetoothError> {
         self.device(id, timeout).connect().await?;
         self.await_service_discovery(id).await
+    }
+
+    /// Connect to the given Bluetooth device, explicitly forcing which bearer (LE or BR/EDR) to
+    /// use for a dual-mode device, via BlueZ's `[experimental]` `Adapter1.ConnectDevice()`
+    /// method. Unlike `connect`/`connect_with_timeout` (which just call `Device1.Connect()` and
+    /// let BlueZ's own bearer-selection logic decide, which can pick BR/EDR for a dual-mode
+    /// device regardless of how it was discovered), this forces the connection down the LE/ATT
+    /// path at the L2CAP layer directly (see BlueZ's `src/adapter.c`, `connect_device()`) --
+    /// and unlike `Device1`'s `PreferredBearer` property, it doesn't depend on BlueZ having
+    /// already classified the device as dual-mode from prior discovery history.
+    ///
+    /// `address_type` should be the device's own already-known `AddressType` (e.g. from
+    /// [`get_device_info`](Self::get_device_info)) -- `ConnectDevice` only accepts "public" or
+    /// "random" for this parameter (both LE-specific; there is no way to explicitly force
+    /// BR/EDR through this method, only to force LE by providing one of these).
+    ///
+    /// Requires BlueZ to have experimental features enabled; expect this to fail on systems
+    /// where they aren't. Callers should generally treat failure here as non-fatal and fall
+    /// back to plain `connect`/`connect_with_timeout` rather than giving up outright.
+    pub async fn connect_device_with_address_type(
+        &self,
+        id: &DeviceId,
+        address_type: AddressType,
+    ) -> Result<(), BluetoothError> {
+        let device_info = self.get_device_info(id).await?;
+
+        let device_path: &str = &id.object_path;
+        let adapter_path = device_path
+            .rsplit_once('/')
+            .map(|(adapter, _)| adapter)
+            .ok_or_else(|| {
+                BluetoothError::DeviceIdParseError(format!(
+                    "Device path {} has no adapter prefix",
+                    device_path
+                ))
+            })?;
+        let adapter = Proxy::new(
+            "org.bluez",
+            Path::new(adapter_path.to_owned())
+                .map_err(|e| BluetoothError::DeviceIdParseError(format!("{:?}", e)))?,
+            DBUS_METHOD_CALL_TIMEOUT,
+            self.connection.clone(),
+        );
+
+        let mut properties: PropMap = HashMap::new();
+        properties.insert(
+            "Address".to_string(),
+            Variant(Box::new(device_info.mac_address.to_string())),
+        );
+        properties.insert(
+            "AddressType".to_string(),
+            Variant(Box::new(address_type.to_string())),
+        );
+
+        let connected_path = adapter.connect_device(properties).await?;
+        let connected_id = DeviceId::new(&connected_path);
+        self.await_service_discovery(&connected_id).await
     }
 
     /// Disconnect from the given Bluetooth device.
