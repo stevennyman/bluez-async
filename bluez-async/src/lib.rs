@@ -35,7 +35,7 @@ use bluez_generated::{
     ORG_BLUEZ_ADAPTER1_NAME, ORG_BLUEZ_DEVICE1_NAME, ORG_BLUEZ_GATT_CHARACTERISTIC1_NAME,
     OrgBluezAdapter1, OrgBluezAdapter1Properties, OrgBluezDevice1, OrgBluezDevice1Properties,
     OrgBluezGattCharacteristic1, OrgBluezGattCharacteristic1Properties, OrgBluezGattDescriptor1,
-    OrgBluezGattService1, OrgBluezGattService1Properties,
+    OrgBluezGattService1,
 };
 use dbus::Path;
 use dbus::arg::{PropMap, Variant};
@@ -51,7 +51,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use thiserror::Error;
 use tokio::task::JoinError;
-use tokio::time::{sleep, timeout};
+use tokio::time::timeout;
 use uuid::Uuid;
 
 const DBUS_METHOD_CALL_TIMEOUT: Duration = Duration::from_secs(30);
@@ -459,84 +459,6 @@ impl BluetoothSession {
     ///
     /// Note that this won't be filled in until the device is connected.
     pub async fn get_services(
-        &self,
-        device: &DeviceId,
-    ) -> Result<Vec<ServiceInfo>, BluetoothError> {
-        // Prefer ObjectManager state over per-node introspection: right after connect, BlueZ can
-        // briefly report ServicesResolved while introspection still races behind object updates.
-        // A short retry window avoids spurious empty service lists.
-        for (attempt, delay_ms) in [0_u64, 100, 250].into_iter().enumerate() {
-            if attempt > 0 {
-                sleep(Duration::from_millis(delay_ms)).await;
-            }
-            let services = self.get_services_from_object_manager(device).await?;
-            if !services.is_empty() {
-                return Ok(services);
-            }
-        }
-
-        // Keep introspection as a compatibility fallback for environments where ObjectManager
-        // snapshots may omit GATT children.
-        let services = self.get_services_from_introspection(device).await?;
-        if !services.is_empty() {
-            return Ok(services);
-        }
-
-        // Final short wait + ObjectManager retry for transient post-connect races.
-        sleep(Duration::from_millis(150)).await;
-        self.get_services_from_object_manager(device).await
-    }
-
-    async fn get_services_from_object_manager(
-        &self,
-        device: &DeviceId,
-    ) -> Result<Vec<ServiceInfo>, BluetoothError> {
-        let bluez_root = Proxy::new(
-            "org.bluez",
-            "/",
-            DBUS_METHOD_CALL_TIMEOUT,
-            self.connection.clone(),
-        );
-        let tree = bluez_root.get_managed_objects().await?;
-        let service_prefix = format!("{}/service", device.object_path);
-
-        let mut services = vec![];
-        for (object_path, interfaces) in tree {
-            if !object_path.starts_with(&service_prefix) {
-                continue;
-            }
-
-            let Some(service_properties) = OrgBluezGattService1Properties::from_interfaces(&interfaces) else {
-                continue;
-            };
-
-            if service_properties
-                .device()
-                .is_some_and(|service_device| service_device != &device.object_path)
-            {
-                continue;
-            }
-
-            let uuid = Uuid::parse_str(
-                service_properties
-                    .uuid()
-                    .ok_or(BluetoothError::RequiredPropertyMissing("UUID"))?,
-            )?;
-            let primary = service_properties
-                .primary()
-                .ok_or(BluetoothError::RequiredPropertyMissing("Primary"))?;
-            services.push(ServiceInfo {
-                id: ServiceId { object_path },
-                uuid,
-                primary,
-            });
-        }
-
-        services.sort_by(|a, b| a.id.cmp(&b.id));
-        Ok(services)
-    }
-
-    async fn get_services_from_introspection(
         &self,
         device: &DeviceId,
     ) -> Result<Vec<ServiceInfo>, BluetoothError> {
